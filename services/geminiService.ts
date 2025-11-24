@@ -1,17 +1,41 @@
 import { GoogleGenAI } from "@google/genai";
 import { CopyStyle } from "../types";
 
-// Initialize the client with the API key from the environment
-// Note: In a real production app, backend proxy is recommended to hide the key.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy initialization to prevent app crash if key is missing
+let ai: GoogleGenAI | null = null;
+
+const getAiClient = () => {
+  if (ai) return ai;
+
+  // Try both standard Vite env and the process.env shim
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    console.warn("⚠️ Gemini API Key is missing. AI features will not work.");
+    return null;
+  }
+
+  try {
+    ai = new GoogleGenAI({ apiKey });
+    return ai;
+  } catch (e) {
+    console.error("Failed to initialize Gemini Client:", e);
+    return null;
+  }
+};
 
 const SYSTEM_INSTRUCTION = `You are an expert social media copywriter for a "Xianyu (Idle Fish) No-Source E-commerce" community. 
 Your goal is to help users rewrite product descriptions into engaging social media posts.
 Tone: Energetic, persuasive, and authentic.`;
 
 export const generateCopy = async (style: CopyStyle, originalText: string): Promise<string> => {
+  const client = getAiClient();
+  if (!client) {
+    return "⚠️ AI Service Unavailable: API Key is missing. Please check configuration.";
+  }
+
   const modelId = "gemini-2.5-flash";
-  
+
   let prompt = "";
 
   if (style === 'xiaohongshu') {
@@ -40,7 +64,7 @@ export const generateCopy = async (style: CopyStyle, originalText: string): Prom
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
       model: modelId,
       contents: prompt,
       config: {
